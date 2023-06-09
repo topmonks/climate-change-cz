@@ -5,6 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 
+import cccz.cfg as cfg
+
 
 class ChmiLocationRecord(object):
     def __init__(self, location):
@@ -27,7 +29,7 @@ class ChmiYearRecord(object):
             loc_str = ('%s,%s\n' % (loc.location, t_str)).replace(' ', '')
             y_str += loc_str
 
-        with open('./data/%d.csv' % self.year, 'w') as f:
+        with open('%s/%d.csv' % (cfg.DATA_DIR, self.year), 'w') as f:
             f.write(y_str)
 
 
@@ -47,7 +49,9 @@ class ChmiScaper(object):
         year_links = self._get_years_links()
 
         for i in range(len(year_links)):
-            if not os.path.isfile('./data/%s.csv' % year_links[i].text):
+            if not os.path.isfile(
+                    '%s/%d.csv' % (cfg.DATA_DIR, year_links[i].text)
+            ):
                 year_rec = ChmiYearRecord(year_links[i].text)
 
                 print('scraping year %d' % year_rec.year)
