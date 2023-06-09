@@ -1,3 +1,4 @@
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -13,18 +14,21 @@ class ChmiLocationRecord(object):
 
 class ChmiYearRecord(object):
     def __init__(self, year):
-        self.year = year
+        self.year = int(year)
         self.locations = []
 
+    def add_location_rec(self, location):
+        self.locations.append(location)
 
-class Records(object):
-    def __init__(self):
-        self.years = []
+    def save(self):
+        y_str = ''
+        for loc in self.locations:
+            t_str = str(loc.temperatures)[1:-1]
+            loc_str = ('%s,%s\n' % (loc.location, t_str)).replace(' ', '')
+            y_str += loc_str
 
-    def save_record(self):
-        for y in self.years:
-            with open('./data/%s' % y) as f:
-                pass
+        with open('./data/%d.csv' % self.year, 'w') as f:
+            f.write(y_str)
 
 
 class ChmiScaper(object):
@@ -32,34 +36,49 @@ class ChmiScaper(object):
         'https://www.chmi.cz/historicka-data/pocasi/uzemni-teploty'
 
     def __init__(self):
-        self._driver = webdriver.Chrome()
+        self._driver = None
         self._executor = ThreadPoolExecutor(max_workers=5)
 
     def scrape(self):
+        self._driver = webdriver.Chrome()
+        self._scrape_years_pages()
+
+    def _scrape_years_pages(self):
         year_links = self._get_years_links()
-        data = self._scrape_year_page(year_links)
 
-    def _scrape_year_page(self, year_links):
-        year_rec = ChmiYearRecord(year_links[0].text)
-        year_links[0].click()
+        for i in range(len(year_links)):
+            if not os.path.isfile('./data/%s.csv' % year_links[i].text):
+                year_rec = ChmiYearRecord(year_links[i].text)
 
-        element = self._driver.find_element(By.ID, 'loadedcontent')
-        table = element.find_element(By.TAG_NAME, 'table')
-        trs = table.find_elements(By.XPATH, "//tr[@class='nezvyraznit']")
+                print('scraping year %d' % year_rec.year)
 
-        i = 0
-        location_rec = None
-        for tr in trs:
-            tds = tr.find_elements(By.TAG_NAME, 'td')
-            if i % 3 == 0:
-                location_rec = ChmiLocationRecord(tds[0].text)
-                print(tds[0].text)
-                for td in tds[2:]:
-                    print(td.text)
-                    location_rec.temperatures.append(td.text)
+                year_links[i].click()
+                time.sleep(3)
 
-        time.sleep(100)
-        return table
+                element = self._driver.find_element(By.ID, 'loadedcontent')
+                table = element.find_element(By.TAG_NAME, 'table')
+                trs = table.find_elements(By.XPATH,
+                                          "//tr[@class='nezvyraznit']")
+
+                for j, tr in enumerate(trs):
+                    tds = tr.find_elements(By.TAG_NAME, 'td')
+                    if tds[1].text == 'T':
+                        location_rec = ChmiLocationRecord(tds[0].text)
+                        year_rec.add_location_rec(location_rec)
+                        for td in tds[2:]:
+                            location_rec.temperatures.append(
+                                float(td.text.replace(',', '.'))
+                            )
+
+                year_rec.save()
+
+                year_links = self._get_years_links()
+
+                time.sleep(3)
+            else:
+                print('Skipping %s...' % year_links[i].text)
+
+        print('all done.')
 
     def _get_years_links(self):
         self._driver.get(self.CHMI_DATA_MAIN_URL)
